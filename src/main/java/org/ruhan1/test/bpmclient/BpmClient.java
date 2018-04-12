@@ -1,5 +1,6 @@
 package org.ruhan1.test.bpmclient;
 
+import org.apache.cxf.helpers.IOUtils;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.manager.RuntimeEngine;
 import org.kie.api.runtime.process.ProcessInstance;
@@ -11,12 +12,13 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.net.URL;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.ruhan1.test.bpmclient.Configuration.PROCESS_PARAMETERS;
 
 /**
  * Created by ruhan on 3/21/18.
@@ -27,20 +29,20 @@ public class BpmClient
 
     final static int TIMEOUT_S = 120;
 
-    public BpmClient() throws Exception
+    public BpmClient( Configuration config ) throws Exception
     {
-        session = initKieSession();
+        session = initKieSession( config );
     }
 
-    protected KieSession initKieSession() throws Exception
+    protected KieSession initKieSession( Configuration config ) throws Exception
     {
-        Configuration config = new Configuration();
+
         RuntimeEngine restSessionFactory;
         restSessionFactory = RemoteRuntimeEngineFactory.newRestBuilder()
-                                                       .addDeploymentId( config.deploymentId )
-                                                       .addUrl( new URL( config.bpmInstanceUrl ) )
-                                                       .addUserName( config.username )
-                                                       .addPassword( config.password )
+                                                       .addDeploymentId( config.getDeploymentId() )
+                                                       .addUrl( new URL( config.getBpmBaseUrl() ) )
+                                                       .addUserName( config.getUsername() )
+                                                       .addPassword( config.getPassword() )
                                                        .addTimeout( TIMEOUT_S )
                                                        .build();
 
@@ -60,19 +62,39 @@ public class BpmClient
 
     }
 
+    /**
+     * Start bmp process.
+     * @param args args[0] is repeat times, default 1
+     */
     public static void main( String[] args ) throws Exception
     {
+        int repeat = 1;
+        if ( args.length > 0 )
+        {
+            repeat = Integer.parseInt( args[0] );
+        }
+
         ignoreSSLCert();
 
-        BpmClient bpmClient = new BpmClient();
+        Configuration config = new Configuration( "config.properties" );
+
+        BpmClient bpmClient = new BpmClient( config );
         Map<String, Object> params = new HashMap<String, Object>();
         params.put( "taskId", 0 );
-        params.put( "processParameters", PROCESS_PARAMETERS );
-        params.put( "usersAuthToken", "XXX" );
-        for ( int i = 0; i < 2; i++ )
+        params.put( "processParameters", readProcessParameters() );
+        params.put( "usersAuthToken", config.getUsersAuthToken() );
+
+
+        for ( int i = 0; i < repeat; i++ )
         {
-            bpmClient.startTask( "ncl-workflows.componentbuild", params );
+            bpmClient.startTask( config.getProcessId(), params );
         }
+    }
+
+    private static String readProcessParameters() throws IOException
+    {
+        File f = new File( "processParameters.json" );
+        return IOUtils.toString( new FileInputStream( f ) );
     }
 
     private static void ignoreSSLCert() throws Exception
